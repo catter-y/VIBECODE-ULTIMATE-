@@ -1,0 +1,208 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Load Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Create Window
+local Window = Rayfield:CreateWindow({
+	Name = "Tycoon Automator",
+	Icon = "zap",
+	LoadingTitle = "Tycoon Automator",
+	LoadingSubtitle = "Loading...",
+	Theme = "Default",
+	ToggleUIKeybind = "K",
+	DisableRayfieldPrompts = false,
+	DisableBuildWarnings = false,
+	ConfigurationSaving = {
+		Enabled = true,
+		FolderName = nil,
+		FileName = "TycoonAutomator"
+	},
+	Discord = {
+		Enabled = false,
+		Invite = "noinvitelink",
+		RememberJoins = true
+	},
+	KeySystem = false,
+})
+
+-- Create Tab
+local Tab = Window:CreateTab("Main", "settings")
+
+-- States
+local remoteModeActive = false
+local loopDelay = 0.1
+local BATCH_LIMIT = 24
+
+-- High-performance cache tables
+local cachedRemotes = {}
+local lastTycoon = nil
+
+-- =====================
+-- Core Logic Functions
+-- =====================
+
+local function getPlayerTycoon()
+	for i = 1, 10 do
+		local tycoon = workspace:FindFirstChild("Tycoon" .. i)
+		if tycoon and tycoon:FindFirstChild("Owner") then
+			local ownerVal = tostring(tycoon.Owner.Value)
+			if ownerVal == LocalPlayer.Name or ownerVal == tostring(LocalPlayer.UserId) then
+				return tycoon
+			end
+		end
+	end
+	return nil
+end
+
+local function cleanupTycoonAssets(purchasesFolder)
+	local categories = purchasesFolder:GetChildren()
+	for i = 1, #categories do
+		local category = categories[i]
+		if category.Name ~= "Hills" and category.Name ~= "Staircase" then
+			local contents = category:GetChildren()
+			for j = 1, #contents do
+				local item = contents[j]
+				if item.Name ~= "Buttons" and item:IsA("Folder") then
+					item:Destroy()
+				end
+			end
+		end
+	end
+end
+
+local function updateRemoteCache(purchasesFolder)
+	local newList = {}
+	local descendants = purchasesFolder:GetDescendants()
+	for i = 1, #descendants do
+		local obj = descendants[i]
+		if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
+			table.insert(newList, obj)
+		end
+	end
+	cachedRemotes = newList
+end
+
+-- =====================
+-- Background Threads
+-- =====================
+
+-- Remote cache updater
+task.spawn(function()
+	while true do
+		local tycoon = getPlayerTycoon()
+		if tycoon and tycoon:FindFirstChild("Purchases") then
+			if lastTycoon ~= tycoon then
+				lastTycoon = tycoon
+				table.clear(cachedRemotes)
+			end
+			updateRemoteCache(tycoon.Purchases)
+		else
+			table.clear(cachedRemotes)
+			lastTycoon = nil
+		end
+		task.wait(2)
+	end
+end)
+
+-- Fast Blaster Loop
+task.spawn(function()
+	while true do
+		task.wait(loopDelay)
+		if not remoteModeActive or #cachedRemotes == 0 then continue end
+
+		local firedInFrame = 0
+
+		for i = 1, #cachedRemotes do
+			if not remoteModeActive then break end
+
+			local rf = cachedRemotes[i]
+			if rf and rf.Parent then
+				local basePart = rf.Parent:FindFirstChild("Base")
+				if basePart then
+					firedInFrame = firedInFrame + 1
+					task.spawn(function()
+						pcall(rf.InvokeServer, rf)
+					end)
+					if firedInFrame >= BATCH_LIMIT then
+						task.wait()
+						firedInFrame = 0
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- =====================
+-- Rayfield UI Elements
+-- =====================
+
+Tab:CreateSection("Remote Automation")
+
+local RemoteToggle = Tab:CreateToggle({
+	Name = "Remote Mode",
+	CurrentValue = false,
+	Flag = "RemoteMode",
+	Callback = function(Value)
+		remoteModeActive = Value
+		Rayfield:Notify({
+			Title = "Remote Mode",
+			Content = "Remote Mode is now " .. (Value and "ON" or "OFF"),
+			Duration = 3,
+			Image = Value and "zap" or "zap-off",
+		})
+	end,
+})
+
+Tab:CreateSection("Performance")
+
+Tab:CreateButton({
+	Name = "Run Anti-Lag",
+	Callback = function()
+		local tycoon = getPlayerTycoon()
+		if tycoon and tycoon:FindFirstChild("Purchases") then
+			local success, err = pcall(cleanupTycoonAssets, tycoon.Purchases)
+			if success then
+				Rayfield:Notify({
+					Title = "Anti-Lag",
+					Content = "Folders successfully cleaned!",
+					Duration = 4,
+					Image = "trash-2",
+				})
+			else
+				Rayfield:Notify({
+					Title = "Anti-Lag Error",
+					Content = "Failed: " .. tostring(err),
+					Duration = 5,
+					Image = "alert-triangle",
+				})
+				warn("[Automator Error] Folder anti-lag failed: " .. tostring(err))
+			end
+		else
+			Rayfield:Notify({
+				Title = "Anti-Lag",
+				Content = "No tycoon found for your player.",
+				Duration = 4,
+				Image = "search-x",
+			})
+		end
+	end,
+})
+
+Tab:CreateSection("Settings")
+
+Tab:CreateSlider({
+	Name = "Loop Delay",
+	Range = {0.05, 2},
+	Increment = 0.05,
+	Suffix = "s",
+	CurrentValue = 0.1,
+	Flag = "LoopDelay",
+	Callback = function(Value)
+		loopDelay = Value
+	end,
+})
+
+Rayfield:LoadConfiguration()
