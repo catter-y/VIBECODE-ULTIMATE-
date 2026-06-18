@@ -159,33 +159,44 @@ local RemoteToggle = Tab:CreateToggle({
 Tab:CreateSection("Performance")
 
 Tab:CreateButton({
-	Name = "Run Anti-Lag",
+	Name = "Run Anti-Lag (All Tycoons)",
 	Callback = function()
-		local tycoon = getPlayerTycoon()
-		if tycoon and tycoon:FindFirstChild("Purchases") then
-			local success, err = pcall(cleanupTycoonAssets, tycoon.Purchases)
-			if success then
-				Rayfield:Notify({
-					Title = "Anti-Lag",
-					Content = "Folders successfully cleaned!",
-					Duration = 4,
-					Image = "trash-2",
-				})
-			else
-				Rayfield:Notify({
-					Title = "Anti-Lag Error",
-					Content = "Failed: " .. tostring(err),
-					Duration = 5,
-					Image = "alert-triangle",
-				})
-				warn("[Automator Error] Folder anti-lag failed: " .. tostring(err))
+		local cleaned = 0
+		local failed = 0
+
+		for i = 1, 10 do
+			local tycoon = workspace:FindFirstChild("Tycoon" .. i)
+			if tycoon and tycoon:FindFirstChild("Purchases") then
+				local success, err = pcall(cleanupTycoonAssets, tycoon.Purchases)
+				if success then
+					cleaned = cleaned + 1
+				else
+					failed = failed + 1
+					warn("[Automator Error] Failed on Tycoon" .. i .. ": " .. tostring(err))
+				end
 			end
+		end
+
+		if cleaned == 0 and failed == 0 then
+			Rayfield:Notify({
+				Title = "Anti-Lag",
+				Content = "No tycoons found in workspace.",
+				Duration = 4,
+				Image = "search-x",
+			})
+		elseif failed > 0 then
+			Rayfield:Notify({
+				Title = "Anti-Lag",
+				Content = "Cleaned " .. cleaned .. " tycoon(s), " .. failed .. " failed.",
+				Duration = 5,
+				Image = "alert-triangle",
+			})
 		else
 			Rayfield:Notify({
 				Title = "Anti-Lag",
-				Content = "No tycoon found for your player.",
+				Content = "Cleaned " .. cleaned .. " tycoon(s) successfully!",
 				Duration = 4,
-				Image = "search-x",
+				Image = "trash-2",
 			})
 		end
 	end,
