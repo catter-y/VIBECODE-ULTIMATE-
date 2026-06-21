@@ -25,7 +25,6 @@ local Tab = Window:Tab({
 -- =====================
 -- Constants & State
 -- =====================
-
 local PLAYER_NAME = LocalPlayer.Name
 local PLAYER_ID   = tostring(LocalPlayer.UserId)
 local IGNORED_FOLDERS = { Hills = true, Staircase = true }
@@ -34,7 +33,8 @@ local remoteModeActive = false
 local loopDelay        = 0.1
 local ascendActive     = false
 local fruitValueActive = false
-local shinyLemonActive = false
+local autoLemonPickActive = false -- Replaced shinyLemonActive
+
 local watchConnections = {}
 local activeRemotes    = {}
 local activeRemoteSet  = {}
@@ -43,7 +43,6 @@ local currentTycoon    = nil
 -- =====================
 -- Helpers
 -- =====================
-
 local function getTycoons()
     local tycoons = {}
     for _, child in ipairs(workspace:GetChildren()) do
@@ -67,10 +66,16 @@ local function getPlayerTycoon()
     end
 end
 
+-- Helper to check if a fruit is "Shiny" based on the game's original logic
+local function isShiny(fruit)
+    local hasSpecial = fruit:FindFirstChild("SpecialAttachment") ~= nil
+    local isNeon = fruit.Material == Enum.Material.Neon
+    return hasSpecial and isNeon
+end
+
 -- =====================
 -- Active Remote Set
 -- =====================
-
 local function addActive(rf)
     if not activeRemoteSet[rf] then
         activeRemoteSet[rf] = true
@@ -94,16 +99,15 @@ end
 local function watchRemote(rf)
     local parent = rf.Parent
     if not parent then return end
-
     if parent:FindFirstChild("Base") then addActive(rf) end
-
+    
     local c1 = parent.ChildAdded:Connect(function(child)
         if child.Name == "Base" then addActive(rf) end
     end)
     local c2 = parent.ChildRemoved:Connect(function(child)
         if child.Name == "Base" then removeActive(rf) end
     end)
-
+    
     watchConnections[#watchConnections + 1] = c1
     watchConnections[#watchConnections + 1] = c2
 end
@@ -119,15 +123,14 @@ end
 local function connectToTycoon(tycoon)
     local purchases = tycoon:FindFirstChild("Purchases")
     if not purchases then return end
-
+    
     currentTycoon = tycoon
-
     for _, obj in ipairs(purchases:GetDescendants()) do
         if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
             watchRemote(obj)
         end
     end
-
+    
     local c = purchases.DescendantAdded:Connect(function(obj)
         if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
             watchRemote(obj)
@@ -157,7 +160,6 @@ end)
 -- =====================
 -- Blaster Loop
 -- =====================
-
 task.spawn(function()
     while true do
         pcall(function()
@@ -165,20 +167,19 @@ task.spawn(function()
                 task.wait(0.1)
                 return
             end
-
+            
             local count = #activeRemotes
             if count == 0 then
                 task.wait(0.1)
                 return
             end
-
+            
             for i = 1, count do
                 local rf = activeRemotes[i]
                 if rf and rf.Parent then
                     task.spawn(pcall, rf.InvokeServer, rf)
                 end
             end
-
             task.wait(loopDelay)
         end)
     end
@@ -187,7 +188,6 @@ end)
 -- =====================
 -- Anti-Lag
 -- =====================
-
 local function cleanupTycoonAssets(purchasesFolder)
     for _, category in ipairs(purchasesFolder:GetChildren()) do
         if not IGNORED_FOLDERS[category.Name] then
@@ -220,7 +220,6 @@ end
 -- =====================
 -- Purchase Sounds
 -- =====================
-
 local function getSound(path)
     local current = RS
     for _, name in ipairs(path) do
@@ -258,7 +257,6 @@ end
 -- =====================
 -- Auto Ascend
 -- =====================
-
 local function startAscend()
     task.spawn(function()
         while ascendActive do
@@ -279,7 +277,6 @@ end
 -- =====================
 -- Auto Fruit Value
 -- =====================
-
 local function startFruitValue()
     task.spawn(function()
         while fruitValueActive do
@@ -298,65 +295,110 @@ local function startFruitValue()
 end
 
 -- =====================
--- Auto Collect Shiny Lemons
+-- Auto Lemon Pick (All + Shiny Priority)
 -- =====================
-
-local function startShinyLemonCollector()
+local function startAutoLemonPick()
     task.spawn(function()
-        while shinyLemonActive do
+        while autoLemonPickActive do
             pcall(function()
                 local character = LocalPlayer.Character
                 if not character or not character:FindFirstChild("HumanoidRootPart") then
                     task.wait(0.1)
                     return
                 end
-
                 local hrp = character.HumanoidRootPart
                 local oldPos = hrp.CFrame
-
+                
                 for _, tycoon in ipairs(getTycoons()) do
-                    if not shinyLemonActive then break end
-
+                    if not autoLemonPickActive then break end
                     local constant = tycoon:FindFirstChild("Constant")
                     if constant then
-                        local trees = constant:FindFirstChild("Trees")
-                        if trees then
-                            for _, tree in ipairs(trees:GetChildren()) do
-                                if not shinyLemonActive then break end
-
+                        local treesFolder = constant:FindFirstChild("Trees")
+                        if treesFolder then
+                            -- 1. Gather all trees and their valid (visible) fruits
+                            local treeData = {}
+                            for _, tree in ipairs(treesFolder:GetChildren()) do
+                                local validFruits = {}
+                                local hasShiny = false
                                 for _, item in ipairs(tree:GetChildren()) do
-                                    if not shinyLemonActive then break end
-
-                                    if item.Name == "Fruit" then
-                                        local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
-                                        local isNeon = item.Material == Enum.Material.Neon
-
-                                        if hasSpecial and isNeon then
-                                            hrp.CFrame = item.CFrame + item.CFrame.LookVector * 5
-                                            task.wait(0.1)
-
-                                            local clickPart = item:FindFirstChild("ClickPart")
-                                            if clickPart then
-                                                local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
-                                                if clickDetector then
-                                                    pcall(fireclickdetector, clickDetector)
-                                                end
+                                    if item.Name == "Fruit" and item:IsA("BasePart") then
+                                        -- Check visibility: Transparency < 1 means it's not collected
+                                        if item.Transparency < 1 then
+                                            table.insert(validFruits, item)
+                                            if isShiny(item) then
+                                                hasShiny = true
                                             end
-
-                                            task.wait(0.5)
                                         end
+                                    end
+                                end
+                                if #validFruits > 0 then
+                                    table.insert(treeData, {
+                                        Tree = tree,
+                                        Fruits = validFruits,
+                                        HasShiny = hasShiny
+                                    })
+                                end
+                            end
+                            
+                            -- 2. Sort trees: prioritize trees that contain shiny fruits
+                            table.sort(treeData, function(a, b)
+                                if a.HasShiny and not b.HasShiny then return true end
+                                if not a.HasShiny and b.HasShiny then return false end
+                                return #a.Fruits > #b.Fruits -- fallback: more fruits first
+                            end)
+                            
+                            -- 3. Process each tree one by one
+                            for _, data in ipairs(treeData) do
+                                if not autoLemonPickActive then break end
+                                local tree = data.Tree
+                                local fruits = data.Fruits
+                                
+                                -- Teleport directly to the tree's bounding box
+                                local center, size = tree:GetBoundingBox()
+                                hrp.CFrame = CFrame.new(center + Vector3.new(0, size.Y/2 + 3, 0))
+                                task.wait(0.2) -- Brief wait for teleport to register
+                                
+                                -- Sort fruits in this specific tree: shiny first!
+                                table.sort(fruits, function(a, b)
+                                    local aShiny = isShiny(a)
+                                    local bShiny = isShiny(b)
+                                    if aShiny and not bShiny then return true end
+                                    if not aShiny and bShiny then return false end
+                                    return false
+                                end)
+                                
+                                -- Collect fruits under this tree
+                                for _, fruit in ipairs(fruits) do
+                                    if not autoLemonPickActive then break end
+                                    
+                                    -- Re-check visibility right before clicking
+                                    if fruit.Transparency >= 1 then continue end
+                                    
+                                    -- Find ClickDetector (check fruit directly, then inside ClickPart)
+                                    local clickDetector = fruit:FindFirstChildOfClass("ClickDetector")
+                                    if not clickDetector then
+                                        local clickPart = fruit:FindFirstChild("ClickPart")
+                                        if clickPart then
+                                            clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
+                                        end
+                                    end
+                                    
+                                    if clickDetector then
+                                        pcall(fireclickdetector, clickDetector)
+                                        task.wait(0.4) -- 0.4 second cooldown
                                     end
                                 end
                             end
                         end
                     end
                 end
-
-                if shinyLemonActive then
+                
+                -- Return to original position when loop finishes or is toggled off
+                if autoLemonPickActive then
                     hrp.CFrame = oldPos
                 end
             end)
-            task.wait(1)
+            task.wait(1) -- Delay before rescanning tycoons
         end
     end)
 end
@@ -364,11 +406,9 @@ end
 -- =====================
 -- WindUI Setup
 -- =====================
-
 local Config = Window.ConfigManager:Config("TycoonAutomator")
 
 local Sec1 = Tab:Section({ Title = "Remote Automation" })
-
 Sec1:Toggle({
     Title = "Auto Buy",
     Desc = "Automatically purchases available items",
@@ -379,7 +419,6 @@ Sec1:Toggle({
         remoteModeActive = state
     end,
 })
-
 Sec1:Toggle({
     Title = "Fast Auto Ascend",
     Icon = "arrow-up",
@@ -390,7 +429,6 @@ Sec1:Toggle({
         if state then startAscend() end
     end,
 })
-
 Sec1:Toggle({
     Title = "Auto Buy Fruit Value",
     Icon = "apple",
@@ -401,18 +439,16 @@ Sec1:Toggle({
         if state then startFruitValue() end
     end,
 })
-
 Sec1:Toggle({
-    Title = "Auto Collect Shiny Lemons",
+    Title = "Auto Lemon Pick (All + Shiny Priority)",
     Icon = "sparkles",
     Value = false,
-    Flag = "ShinyLemons",
+    Flag = "AutoLemonPick",
     Callback = function(state)
-        shinyLemonActive = state
-        if state then startShinyLemonCollector() end
+        autoLemonPickActive = state
+        if state then startAutoLemonPick() end
     end,
 })
-
 Sec1:Toggle({
     Title = "Mute Purchase Sounds",
     Icon = "volume-x",
@@ -424,7 +460,6 @@ Sec1:Toggle({
 })
 
 local Sec2 = Tab:Section({ Title = "Performance" })
-
 Sec2:Toggle({
     Title = "Auto-Run Anti-Lag on Startup",
     Icon = "trash-2",
@@ -436,7 +471,6 @@ Sec2:Toggle({
         end
     end,
 })
-
 Sec2:Button({
     Title = "Run Anti-Lag Now (All Tycoons)",
     Icon = "trash-2",
@@ -453,7 +487,6 @@ Sec2:Button({
 })
 
 local Sec3 = Tab:Section({ Title = "Settings" })
-
 Sec3:Slider({
     Title = "Loop Delay",
     Desc = "Delay between remote fires",
