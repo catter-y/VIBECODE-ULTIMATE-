@@ -37,6 +37,7 @@ local remoteModeActive = false
 local loopDelay        = 0.1
 local ascendActive     = false
 local fruitValueActive = false
+local shinyLemonActive = false
 local watchConnections = {}
 local activeRemotes    = {}
 local activeRemoteSet  = {}
@@ -149,7 +150,7 @@ workspace.ChildRemoved:Connect(function(child)
 end)
 
 -- =====================
--- Blaster Loop — fires ALL active remotes simultaneously each frame
+-- Blaster Loop â€” fires ALL active remotes simultaneously each frame
 -- =====================
 
 task.spawn(function()
@@ -166,7 +167,7 @@ task.spawn(function()
 				return
 			end
 
-			-- Spawn every active remote concurrently — all hit server same frame
+			-- Spawn every active remote concurrently â€” all hit server same frame
 			for i = 1, count do
 				local rf = activeRemotes[i]
 				if rf and rf.Parent then
@@ -288,6 +289,93 @@ local function stopFruitValue()
 end
 
 -- =====================
+-- Auto Collect Shiny Lemons
+-- =====================
+
+local shinyLemonThread = nil
+
+local function startShinyLemonCollector()
+	shinyLemonThread = task.spawn(function()
+		while shinyLemonActive do
+			pcall(function()
+				local character = LocalPlayer.Character
+				if not character or not character:FindFirstChild("HumanoidRootPart") then
+					task.wait(0.1)
+					return
+				end
+
+				local hrp = character.HumanoidRootPart
+				local oldPos = hrp.CFrame
+
+				-- Scan all tycoons for shiny fruits
+				for i = 1, 10 do
+					if not shinyLemonActive then break end
+
+					local tycoon = workspace:FindFirstChild("Tycoon" .. i)
+					if tycoon then
+						local constant = tycoon:FindFirstChild("Constant")
+						if constant then
+							local trees = constant:FindFirstChild("Trees")
+							if trees then
+								local treeChildren = trees:GetChildren()
+								for _, tree in ipairs(treeChildren) do
+									if not shinyLemonActive then break end
+
+									local treeContents = tree:GetChildren()
+									for _, item in ipairs(treeContents) do
+										if item.Name == "Fruit" then
+											-- Check if shiny (has SpecialAttachment and Neon material)
+											local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
+											local isNeon = item.Material == Enum.Material.Neon
+
+											if hasSpecial and isNeon then
+												-- TP to fruit
+												hrp.CFrame = item.CFrame + item.CFrame.LookVector * 5
+
+												-- Wait before clicking
+												task.wait(0.1)
+
+												-- Find and fire ClickDetector
+												local clickPart = item:FindFirstChild("ClickPart")
+												if clickPart then
+													local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
+													if clickDetector then
+														task.spawn(function()
+															pcall(clickDetector.MouseClick)
+														end)
+													end
+												end
+
+												-- Delay before next lemon
+												task.wait(0.5)
+											end
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+
+				-- Return to original position
+				if shinyLemonActive then
+					hrp.CFrame = oldPos
+				end
+			end)
+			task.wait(1) -- Scan interval
+		end
+	end)
+end
+
+local function stopShinyLemonCollector()
+	shinyLemonActive = false
+	if shinyLemonThread then
+		task.cancel(shinyLemonThread)
+		shinyLemonThread = nil
+	end
+end
+
+-- =====================
 -- Rayfield UI
 -- =====================
 
@@ -344,6 +432,26 @@ Tab:CreateToggle({
 			Content = "Auto Fruit Value is now " .. (Value and "ON" or "OFF"),
 			Duration = 3,
 			Image = Value and "apple" or "apple",
+		})
+	end,
+})
+
+Tab:CreateToggle({
+	Name = "Auto Collect Shiny Lemons",
+	CurrentValue = false,
+	Flag = "ShinyLemons",
+	Callback = function(Value)
+		shinyLemonActive = Value
+		if Value then
+			startShinyLemonCollector()
+		else
+			stopShinyLemonCollector()
+		end
+		Rayfield:Notify({
+			Title = "Shiny Lemon Collector",
+			Content = "Shiny Lemon Collector is now " .. (Value and "ON" or "OFF"),
+			Duration = 3,
+			Image = "sparkles",
 		})
 	end,
 })
