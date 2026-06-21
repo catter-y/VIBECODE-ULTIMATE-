@@ -36,6 +36,7 @@ local IGNORED_FOLDERS = { Hills = true, Staircase = true }
 local remoteModeActive = false
 local loopDelay        = 0.1
 local ascendActive     = false
+local fruitValueActive = false
 local watchConnections = {}
 local activeRemotes    = {}
 local activeRemoteSet  = {}
@@ -253,6 +254,40 @@ local function stopAscend()
 end
 
 -- =====================
+-- Auto Fruit Value
+-- =====================
+
+local fruitValueThread = nil
+
+local function startFruitValue()
+	fruitValueThread = task.spawn(function()
+		while fruitValueActive do
+			for i = 1, 10 do
+				local tycoon = workspace:FindFirstChild("Tycoon" .. i)
+				if tycoon then
+					local remotes = tycoon:FindFirstChild("Remotes")
+					if remotes then
+						local upgradePower = remotes:FindFirstChild("UpgradePowerLevel")
+						if upgradePower then
+							task.spawn(pcall, upgradePower.InvokeServer, upgradePower, "ClickFruitValue")
+						end
+					end
+				end
+			end
+			task.wait(0.3)
+		end
+	end)
+end
+
+local function stopFruitValue()
+	fruitValueActive = false
+	if fruitValueThread then
+		task.cancel(fruitValueThread)
+		fruitValueThread = nil
+	end
+end
+
+-- =====================
 -- Rayfield UI
 -- =====================
 
@@ -289,6 +324,26 @@ Tab:CreateToggle({
 			Content = "Auto Ascend is now " .. (Value and "ON" or "OFF"),
 			Duration = 3,
 			Image = Value and "arrow-up" or "arrow-down",
+		})
+	end,
+})
+
+Tab:CreateToggle({
+	Name = "Auto Buy Fruit Value",
+	CurrentValue = false,
+	Flag = "FruitValue",
+	Callback = function(Value)
+		fruitValueActive = Value
+		if Value then
+			startFruitValue()
+		else
+			stopFruitValue()
+		end
+		Rayfield:Notify({
+			Title = "Auto Fruit Value",
+			Content = "Auto Fruit Value is now " .. (Value and "ON" or "OFF"),
+			Duration = 3,
+			Image = Value and "apple" or "apple",
 		})
 	end,
 })
