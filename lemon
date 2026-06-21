@@ -332,8 +332,8 @@ local function startShinyLemonCollector()
 												-- TP to fruit
 												hrp.CFrame = item.CFrame + item.CFrame.LookVector * 5
 
-												-- Wait before clicking
-												task.wait(0.1)
+												-- Wait for TP to settle
+												task.wait(0.5)
 
 												-- Find and fire ClickDetector
 												local clickPart = item:FindFirstChild("ClickPart")
@@ -346,8 +346,8 @@ local function startShinyLemonCollector()
 													end
 												end
 
-												-- Delay before next lemon
-												task.wait(0.5)
+												-- Stay for 1 second total before moving to next lemon
+												task.wait(1)
 											end
 										end
 									end
