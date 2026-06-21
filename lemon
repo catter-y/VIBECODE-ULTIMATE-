@@ -307,7 +307,7 @@ local function startShinyLemonCollector()
 				local hrp = character.HumanoidRootPart
 				local oldPos = hrp.CFrame
 
-				-- Scan all tycoons for shiny fruits
+				-- Scan all tycoons for fruits
 				for i = 1, 10 do
 					if not shinyLemonActive then break end
 
@@ -321,33 +321,62 @@ local function startShinyLemonCollector()
 								for _, tree in ipairs(treeChildren) do
 									if not shinyLemonActive then break end
 
+									local shinyFruits = {}
+									local normalFruits = {}
+
+									-- Separate fruits into shiny and normal
 									local treeContents = tree:GetChildren()
 									for _, item in ipairs(treeContents) do
-										if item.Name == "Fruit" then
-											-- Check if shiny (has SpecialAttachment and Neon material)
+										if item.Name == "Fruit" and item.Transparency ~= 1 then
 											local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
 											local isNeon = item.Material == Enum.Material.Neon
 
 											if hasSpecial and isNeon then
-												-- TP to fruit
-												hrp.CFrame = item.CFrame + item.CFrame.LookVector * 5
-
-												-- Wait for TP to settle
-												task.wait(0.5)
-
-												-- Find and fire ClickDetector
-												local clickPart = item:FindFirstChild("ClickPart")
-												if clickPart then
-													local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
-													if clickDetector then
-														pcall(clickDetector.fireclickdetector, clickDetector)
-													end
-												end
-
-												-- Stay for 1 second total before moving to next lemon
-												task.wait(1)
+												shinyFruits[#shinyFruits + 1] = item
+											else
+												normalFruits[#normalFruits + 1] = item
 											end
 										end
+									end
+
+									-- Process shiny lemons first
+									for _, fruit in ipairs(shinyFruits) do
+										if not shinyLemonActive then break end
+
+										-- TP to fruit
+										hrp.CFrame = fruit.CFrame + fruit.CFrame.LookVector * 5
+										task.wait(0.1)
+
+										-- Fire ClickDetector
+										local clickPart = fruit:FindFirstChild("ClickPart")
+										if clickPart then
+											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
+											if clickDetector then
+												pcall(clickDetector.fireclickdetector, clickDetector)
+											end
+										end
+
+										task.wait(0.4)
+									end
+
+									-- Then process normal lemons
+									for _, fruit in ipairs(normalFruits) do
+										if not shinyLemonActive then break end
+
+										-- TP to fruit
+										hrp.CFrame = fruit.CFrame + fruit.CFrame.LookVector * 5
+										task.wait(0.1)
+
+										-- Fire ClickDetector
+										local clickPart = fruit:FindFirstChild("ClickPart")
+										if clickPart then
+											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
+											if clickDetector then
+												pcall(clickDetector.fireclickdetector, clickDetector)
+											end
+										end
+
+										task.wait(0.4)
 									end
 								end
 							end
@@ -360,7 +389,7 @@ local function startShinyLemonCollector()
 					hrp.CFrame = oldPos
 				end
 			end)
-			task.wait(1) -- Scan interval
+			task.wait(2) -- Scan interval between full sweeps
 		end
 	end)
 end
