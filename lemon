@@ -352,11 +352,11 @@ local function startShinyLemonCollector()
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
 											if clickDetector then
-												pcall(clickDetector.fireclickdetector, clickDetector)
+												pcall(fireclickdetector, clickDetector, 0)
 											end
 										end
 
-										task.wait(0.4)
+										task.wait(0.35)
 									end
 
 									-- Then process normal lemons
@@ -372,11 +372,11 @@ local function startShinyLemonCollector()
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
 											if clickDetector then
-												pcall(clickDetector.fireclickdetector, clickDetector)
+												pcall(fireclickdetector, clickDetector, 0)
 											end
 										end
 
-										task.wait(0.4)
+										task.wait(0.35)
 									end
 								end
 							end
