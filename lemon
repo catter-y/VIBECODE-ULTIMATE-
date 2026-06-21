@@ -33,7 +33,7 @@ local remoteModeActive = false
 local loopDelay        = 0.1
 local ascendActive     = false
 local fruitValueActive = false
-local autoLemonPickActive = false -- Replaced shinyLemonActive
+local autoLemonPickActive = false
 
 local watchConnections = {}
 local activeRemotes    = {}
@@ -66,7 +66,6 @@ local function getPlayerTycoon()
     end
 end
 
--- Helper to check if a fruit is "Shiny" based on the game's original logic
 local function isShiny(fruit)
     local hasSpecial = fruit:FindFirstChild("SpecialAttachment") ~= nil
     local isNeon = fruit.Material == Enum.Material.Neon
@@ -74,42 +73,13 @@ local function isShiny(fruit)
 end
 
 -- =====================
--- Active Remote Set
+-- Active Remote Set (FIXED: Auto Buy now adds remotes unconditionally)
 -- =====================
 local function addActive(rf)
     if not activeRemoteSet[rf] then
         activeRemoteSet[rf] = true
         activeRemotes[#activeRemotes + 1] = rf
     end
-end
-
-local function removeActive(rf)
-    if activeRemoteSet[rf] then
-        activeRemoteSet[rf] = nil
-        for i = #activeRemotes, 1, -1 do
-            if activeRemotes[i] == rf then
-                activeRemotes[i] = activeRemotes[#activeRemotes]
-                activeRemotes[#activeRemotes] = nil
-                break
-            end
-        end
-    end
-end
-
-local function watchRemote(rf)
-    local parent = rf.Parent
-    if not parent then return end
-    if parent:FindFirstChild("Base") then addActive(rf) end
-    
-    local c1 = parent.ChildAdded:Connect(function(child)
-        if child.Name == "Base" then addActive(rf) end
-    end)
-    local c2 = parent.ChildRemoved:Connect(function(child)
-        if child.Name == "Base" then removeActive(rf) end
-    end)
-    
-    watchConnections[#watchConnections + 1] = c1
-    watchConnections[#watchConnections + 1] = c2
 end
 
 local function disconnectAll()
@@ -125,17 +95,18 @@ local function connectToTycoon(tycoon)
     if not purchases then return end
     
     currentTycoon = tycoon
-    for _, obj in ipairs(purchases:GetDescendants()) do
+    
+    local function processDescendant(obj)
         if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
-            watchRemote(obj)
+            addActive(obj)
         end
     end
+
+    for _, obj in ipairs(purchases:GetDescendants()) do
+        processDescendant(obj)
+    end
     
-    local c = purchases.DescendantAdded:Connect(function(obj)
-        if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
-            watchRemote(obj)
-        end
-    end)
+    local c = purchases.DescendantAdded:Connect(processDescendant)
     watchConnections[#watchConnections + 1] = c
 end
 
@@ -295,7 +266,7 @@ local function startFruitValue()
 end
 
 -- =====================
--- Auto Lemon Pick (All + Shiny Priority)
+-- Auto Lemon Pick (FIXED: Better tree/fruit detection & teleportation)
 -- =====================
 local function startAutoLemonPick()
     task.spawn(function()
@@ -303,7 +274,7 @@ local function startAutoLemonPick()
             pcall(function()
                 local character = LocalPlayer.Character
                 if not character or not character:FindFirstChild("HumanoidRootPart") then
-                    task.wait(0.1)
+                    task.wait(0.5)
                     return
                 end
                 local hrp = character.HumanoidRootPart
@@ -311,18 +282,28 @@ local function startAutoLemonPick()
                 
                 for _, tycoon in ipairs(getTycoons()) do
                     if not autoLemonPickActive then break end
+                    
+                    -- Find Trees folder with fallbacks
+                    local treesFolder = nil
                     local constant = tycoon:FindFirstChild("Constant")
                     if constant then
-                        local treesFolder = constant:FindFirstChild("Trees")
-                        if treesFolder then
-                            -- 1. Gather all trees and their valid (visible) fruits
-                            local treeData = {}
-                            for _, tree in ipairs(treesFolder:GetChildren()) do
+                        treesFolder = constant:FindFirstChild("Trees")
+                    end
+                    if not treesFolder then
+                        treesFolder = tycoon:FindFirstChild("Trees")
+                    end
+                    
+                    if treesFolder then
+                        local treeData = {}
+                        
+                        -- Use GetDescendants to find all Models/Parts that contain a "Fruit"
+                        for _, tree in ipairs(treesFolder:GetDescendants()) do
+                            if tree:IsA("Model") or tree:IsA("BasePart") then
                                 local validFruits = {}
                                 local hasShiny = false
-                                for _, item in ipairs(tree:GetChildren()) do
+                                
+                                for _, item in ipairs(tree:GetDescendants()) do
                                     if item.Name == "Fruit" and item:IsA("BasePart") then
-                                        -- Check visibility: Transparency < 1 means it's not collected
                                         if item.Transparency < 1 then
                                             table.insert(validFruits, item)
                                             if isShiny(item) then
@@ -331,6 +312,7 @@ local function startAutoLemonPick()
                                         end
                                     end
                                 end
+                                
                                 if #validFruits > 0 then
                                     table.insert(treeData, {
                                         Tree = tree,
@@ -339,66 +321,67 @@ local function startAutoLemonPick()
                                     })
                                 end
                             end
+                        end
+                        
+                        -- Sort trees: shiny first
+                        table.sort(treeData, function(a, b)
+                            if a.HasShiny and not b.HasShiny then return true end
+                            if not a.HasShiny and b.HasShiny then return false end
+                            return #a.Fruits > #b.Fruits
+                        end)
+                        
+                        for _, data in ipairs(treeData) do
+                            if not autoLemonPickActive then break end
+                            local tree = data.Tree
+                            local fruits = data.Fruits
                             
-                            -- 2. Sort trees: prioritize trees that contain shiny fruits
-                            table.sort(treeData, function(a, b)
-                                if a.HasShiny and not b.HasShiny then return true end
-                                if not a.HasShiny and b.HasShiny then return false end
-                                return #a.Fruits > #b.Fruits -- fallback: more fruits first
+                            -- 1. Teleport to the tree's center first
+                            local center, size = tree:GetBoundingBox()
+                            hrp.CFrame = CFrame.new(center + Vector3.new(0, size.Y/2 + 3, 0))
+                            task.wait(0.2)
+                            
+                            -- Sort fruits: shiny first
+                            table.sort(fruits, function(a, b)
+                                local aShiny = isShiny(a)
+                                local bShiny = isShiny(b)
+                                if aShiny and not bShiny then return true end
+                                if not aShiny and bShiny then return false end
+                                return false
                             end)
                             
-                            -- 3. Process each tree one by one
-                            for _, data in ipairs(treeData) do
+                            -- 2. Collect fruits (teleport to each to guarantee ClickDetector range)
+                            for _, fruit in ipairs(fruits) do
                                 if not autoLemonPickActive then break end
-                                local tree = data.Tree
-                                local fruits = data.Fruits
+                                if fruit.Transparency >= 1 then continue end
                                 
-                                -- Teleport directly to the tree's bounding box
-                                local center, size = tree:GetBoundingBox()
-                                hrp.CFrame = CFrame.new(center + Vector3.new(0, size.Y/2 + 3, 0))
-                                task.wait(0.2) -- Brief wait for teleport to register
+                                -- Teleport directly to the fruit to ensure it's in range
+                                hrp.CFrame = fruit.CFrame + Vector3.new(0, 3, 0)
                                 
-                                -- Sort fruits in this specific tree: shiny first!
-                                table.sort(fruits, function(a, b)
-                                    local aShiny = isShiny(a)
-                                    local bShiny = isShiny(b)
-                                    if aShiny and not bShiny then return true end
-                                    if not aShiny and bShiny then return false end
-                                    return false
-                                end)
-                                
-                                -- Collect fruits under this tree
-                                for _, fruit in ipairs(fruits) do
-                                    if not autoLemonPickActive then break end
-                                    
-                                    -- Re-check visibility right before clicking
-                                    if fruit.Transparency >= 1 then continue end
-                                    
-                                    -- Find ClickDetector (check fruit directly, then inside ClickPart)
-                                    local clickDetector = fruit:FindFirstChildOfClass("ClickDetector")
-                                    if not clickDetector then
-                                        local clickPart = fruit:FindFirstChild("ClickPart")
-                                        if clickPart then
-                                            clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
-                                        end
+                                local clickDetector = fruit:FindFirstChildOfClass("ClickDetector")
+                                if not clickDetector then
+                                    local clickPart = fruit:FindFirstChild("ClickPart")
+                                    if clickPart then
+                                        clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
                                     end
-                                    
-                                    if clickDetector then
-                                        pcall(fireclickdetector, clickDetector)
-                                        task.wait(0.4) -- 0.4 second cooldown
-                                    end
+                                end
+                                if not clickDetector then
+                                    clickDetector = tree:FindFirstChildOfClass("ClickDetector")
+                                end
+                                
+                                if clickDetector then
+                                    pcall(fireclickdetector, clickDetector)
+                                    task.wait(0.4)
                                 end
                             end
                         end
                     end
                 end
                 
-                -- Return to original position when loop finishes or is toggled off
                 if autoLemonPickActive then
                     hrp.CFrame = oldPos
                 end
             end)
-            task.wait(1) -- Delay before rescanning tycoons
+            task.wait(1)
         end
     end)
 end
