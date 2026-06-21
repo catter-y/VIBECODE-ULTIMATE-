@@ -307,7 +307,7 @@ local function startShinyLemonCollector()
 				local hrp = character.HumanoidRootPart
 				local oldPos = hrp.CFrame
 
-				-- Scan all tycoons for trees
+				-- Scan all tycoons for fruits
 				for i = 1, 10 do
 					if not shinyLemonActive then break end
 
@@ -317,16 +317,16 @@ local function startShinyLemonCollector()
 						if constant then
 							local trees = constant:FindFirstChild("Trees")
 							if trees then
-								local treesWithShiny = {}
-								local treesWithoutShiny = {}
-
-								-- Separate trees into those with shiny and those without
 								local treeChildren = trees:GetChildren()
+								
+								-- Separate trees by whether they have shiny lemons
+								local shinyTrees = {}
+								local normalTrees = {}
+								
 								for _, tree in ipairs(treeChildren) do
 									local hasShiny = false
 									local treeContents = tree:GetChildren()
-
-									-- Check if tree has any shiny visible fruits
+									
 									for _, item in ipairs(treeContents) do
 										if item.Name == "Fruit" and item.Transparency ~= 1 then
 											if item:FindFirstChild("SpecialAttachment") and item.Material == Enum.Material.Neon then
@@ -335,31 +335,35 @@ local function startShinyLemonCollector()
 											end
 										end
 									end
-
+									
 									if hasShiny then
-										treesWithShiny[#treesWithShiny + 1] = tree
+										shinyTrees[#shinyTrees + 1] = tree
 									else
-										treesWithoutShiny[#treesWithoutShiny + 1] = tree
+										normalTrees[#normalTrees + 1] = tree
 									end
 								end
-
-								-- Process trees with shiny lemons FIRST
-								for _, tree in ipairs(treesWithShiny) do
+								
+								-- Process shiny trees first
+								local allTrees = {}
+								for _, tree in ipairs(shinyTrees) do allTrees[#allTrees + 1] = tree end
+								for _, tree in ipairs(normalTrees) do allTrees[#allTrees + 1] = tree end
+								
+								for _, tree in ipairs(allTrees) do
 									if not shinyLemonActive then break end
-
-									-- TP to tree
+									
+									-- TP to tree once
 									hrp.CFrame = tree.CFrame
-
-									-- Collect all fruits from this tree
+									
 									local shinyFruits = {}
 									local normalFruits = {}
 									local treeContents = tree:GetChildren()
-
+									
+									-- Separate fruits into shiny and normal
 									for _, item in ipairs(treeContents) do
 										if item.Name == "Fruit" and item.Transparency ~= 1 then
 											local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
 											local isNeon = item.Material == Enum.Material.Neon
-
+											
 											if hasSpecial and isNeon then
 												shinyFruits[#shinyFruits + 1] = item
 											else
@@ -367,11 +371,11 @@ local function startShinyLemonCollector()
 											end
 										end
 									end
-
-									-- Click shiny fruits first
+									
+									-- Click shiny lemons first
 									for _, fruit in ipairs(shinyFruits) do
 										if not shinyLemonActive then break end
-
+										
 										local clickPart = fruit:FindFirstChild("ClickPart")
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
@@ -379,14 +383,14 @@ local function startShinyLemonCollector()
 												pcall(fireclickdetector, clickDetector, 0)
 											end
 										end
-
+										
 										task.wait(0.35)
 									end
-
-									-- Then click normal fruits
+									
+									-- Then click normal lemons
 									for _, fruit in ipairs(normalFruits) do
 										if not shinyLemonActive then break end
-
+										
 										local clickPart = fruit:FindFirstChild("ClickPart")
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
@@ -394,40 +398,7 @@ local function startShinyLemonCollector()
 												pcall(fireclickdetector, clickDetector, 0)
 											end
 										end
-
-										task.wait(0.35)
-									end
-								end
-
-								-- Then process trees without shiny
-								for _, tree in ipairs(treesWithoutShiny) do
-									if not shinyLemonActive then break end
-
-									-- TP to tree
-									hrp.CFrame = tree.CFrame
-
-									-- Collect all fruits from this tree
-									local fruits = {}
-									local treeContents = tree:GetChildren()
-
-									for _, item in ipairs(treeContents) do
-										if item.Name == "Fruit" and item.Transparency ~= 1 then
-											fruits[#fruits + 1] = item
-										end
-									end
-
-									-- Click all fruits
-									for _, fruit in ipairs(fruits) do
-										if not shinyLemonActive then break end
-
-										local clickPart = fruit:FindFirstChild("ClickPart")
-										if clickPart then
-											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
-											if clickDetector then
-												pcall(fireclickdetector, clickDetector, 0)
-											end
-										end
-
+										
 										task.wait(0.35)
 									end
 								end
@@ -441,7 +412,7 @@ local function startShinyLemonCollector()
 					hrp.CFrame = oldPos
 				end
 			end)
-			task.wait(2) -- Scan interval between full sweeps
+			task.wait(1)
 		end
 	end)
 end
