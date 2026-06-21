@@ -307,7 +307,7 @@ local function startShinyLemonCollector()
 				local hrp = character.HumanoidRootPart
 				local oldPos = hrp.CFrame
 
-				-- Scan all tycoons for fruits
+				-- Scan all tycoons for trees
 				for i = 1, 10 do
 					if not shinyLemonActive then break end
 
@@ -317,15 +317,44 @@ local function startShinyLemonCollector()
 						if constant then
 							local trees = constant:FindFirstChild("Trees")
 							if trees then
+								local treesWithShiny = {}
+								local treesWithoutShiny = {}
+
+								-- Separate trees into those with shiny and those without
 								local treeChildren = trees:GetChildren()
 								for _, tree in ipairs(treeChildren) do
+									local hasShiny = false
+									local treeContents = tree:GetChildren()
+
+									-- Check if tree has any shiny visible fruits
+									for _, item in ipairs(treeContents) do
+										if item.Name == "Fruit" and item.Transparency ~= 1 then
+											if item:FindFirstChild("SpecialAttachment") and item.Material == Enum.Material.Neon then
+												hasShiny = true
+												break
+											end
+										end
+									end
+
+									if hasShiny then
+										treesWithShiny[#treesWithShiny + 1] = tree
+									else
+										treesWithoutShiny[#treesWithoutShiny + 1] = tree
+									end
+								end
+
+								-- Process trees with shiny lemons FIRST
+								for _, tree in ipairs(treesWithShiny) do
 									if not shinyLemonActive then break end
 
+									-- TP to tree
+									hrp.CFrame = tree.CFrame
+
+									-- Collect all fruits from this tree
 									local shinyFruits = {}
 									local normalFruits = {}
-
-									-- Separate fruits into shiny and normal
 									local treeContents = tree:GetChildren()
+
 									for _, item in ipairs(treeContents) do
 										if item.Name == "Fruit" and item.Transparency ~= 1 then
 											local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
@@ -339,15 +368,10 @@ local function startShinyLemonCollector()
 										end
 									end
 
-									-- Process shiny lemons first
+									-- Click shiny fruits first
 									for _, fruit in ipairs(shinyFruits) do
 										if not shinyLemonActive then break end
 
-										-- TP to fruit
-										hrp.CFrame = fruit.CFrame + fruit.CFrame.LookVector * 5
-										task.wait(0.1)
-
-										-- Fire ClickDetector
 										local clickPart = fruit:FindFirstChild("ClickPart")
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
@@ -359,15 +383,43 @@ local function startShinyLemonCollector()
 										task.wait(0.35)
 									end
 
-									-- Then process normal lemons
+									-- Then click normal fruits
 									for _, fruit in ipairs(normalFruits) do
 										if not shinyLemonActive then break end
 
-										-- TP to fruit
-										hrp.CFrame = fruit.CFrame + fruit.CFrame.LookVector * 5
-										task.wait(0.1)
+										local clickPart = fruit:FindFirstChild("ClickPart")
+										if clickPart then
+											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
+											if clickDetector then
+												pcall(fireclickdetector, clickDetector, 0)
+											end
+										end
 
-										-- Fire ClickDetector
+										task.wait(0.35)
+									end
+								end
+
+								-- Then process trees without shiny
+								for _, tree in ipairs(treesWithoutShiny) do
+									if not shinyLemonActive then break end
+
+									-- TP to tree
+									hrp.CFrame = tree.CFrame
+
+									-- Collect all fruits from this tree
+									local fruits = {}
+									local treeContents = tree:GetChildren()
+
+									for _, item in ipairs(treeContents) do
+										if item.Name == "Fruit" and item.Transparency ~= 1 then
+											fruits[#fruits + 1] = item
+										end
+									end
+
+									-- Click all fruits
+									for _, fruit in ipairs(fruits) do
+										if not shinyLemonActive then break end
+
 										local clickPart = fruit:FindFirstChild("ClickPart")
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
