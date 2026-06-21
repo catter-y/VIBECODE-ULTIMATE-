@@ -2,28 +2,25 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- Load Rayfield
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- =====================
+-- Load WindUI
+-- =====================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-local Window = Rayfield:CreateWindow({
-	Name = "Tycoon Automator",
-	Icon = "zap",
-	LoadingTitle = "Tycoon Automator",
-	LoadingSubtitle = "Loading...",
-	Theme = "Default",
-	ToggleUIKeybind = "K",
-	DisableRayfieldPrompts = false,
-	DisableBuildWarnings = false,
-	ConfigurationSaving = {
-		Enabled = true,
-		FolderName = nil,
-		FileName = "TycoonAutomator"
-	},
-	Discord = { Enabled = false, Invite = "noinvitelink", RememberJoins = true },
-	KeySystem = false,
+local Window = WindUI:CreateWindow({
+    Title = "Tycoon Automator",
+    Author = "by Automator",
+    Icon = "zap",
+    Folder = "TycoonAutomator",
+    Size = UDim2.fromOffset(580, 460),
+    Theme = "Dark",
+    KeySystem = false,
 })
 
-local Tab = Window:CreateTab("Main", "settings")
+local Tab = Window:Tab({
+    Title = "Main",
+    Icon = "settings",
+})
 
 -- =====================
 -- Constants & State
@@ -47,18 +44,27 @@ local currentTycoon    = nil
 -- Helpers
 -- =====================
 
+local function getTycoons()
+    local tycoons = {}
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child.Name:match("^Tycoon") then
+            table.insert(tycoons, child)
+        end
+    end
+    return tycoons
+end
+
 local function isOwnedByLocalPlayer(tycoon)
-	local o = tycoon:FindFirstChild("Owner")
-	if not o then return false end
-	local v = tostring(o.Value)
-	return v == PLAYER_NAME or v == PLAYER_ID
+    local o = tycoon:FindFirstChild("Owner")
+    if not o then return false end
+    local v = tostring(o.Value)
+    return v == PLAYER_NAME or v == PLAYER_ID
 end
 
 local function getPlayerTycoon()
-	for i = 1, 10 do
-		local t = workspace:FindFirstChild("Tycoon" .. i)
-		if t and isOwnedByLocalPlayer(t) then return t end
-	end
+    for _, t in ipairs(getTycoons()) do
+        if isOwnedByLocalPlayer(t) then return t end
+    end
 end
 
 -- =====================
@@ -66,118 +72,116 @@ end
 -- =====================
 
 local function addActive(rf)
-	if not activeRemoteSet[rf] then
-		activeRemoteSet[rf] = true
-		activeRemotes[#activeRemotes + 1] = rf
-	end
+    if not activeRemoteSet[rf] then
+        activeRemoteSet[rf] = true
+        activeRemotes[#activeRemotes + 1] = rf
+    end
 end
 
 local function removeActive(rf)
-	if activeRemoteSet[rf] then
-		activeRemoteSet[rf] = nil
-		for i = #activeRemotes, 1, -1 do
-			if activeRemotes[i] == rf then
-				activeRemotes[i] = activeRemotes[#activeRemotes]
-				activeRemotes[#activeRemotes] = nil
-				break
-			end
-		end
-	end
+    if activeRemoteSet[rf] then
+        activeRemoteSet[rf] = nil
+        for i = #activeRemotes, 1, -1 do
+            if activeRemotes[i] == rf then
+                activeRemotes[i] = activeRemotes[#activeRemotes]
+                activeRemotes[#activeRemotes] = nil
+                break
+            end
+        end
+    end
 end
 
 local function watchRemote(rf)
-	local parent = rf.Parent
-	if not parent then return end
+    local parent = rf.Parent
+    if not parent then return end
 
-	if parent:FindFirstChild("Base") then addActive(rf) end
+    if parent:FindFirstChild("Base") then addActive(rf) end
 
-	local c1 = parent.ChildAdded:Connect(function(child)
-		if child.Name == "Base" then addActive(rf) end
-	end)
-	local c2 = parent.ChildRemoved:Connect(function(child)
-		if child.Name == "Base" then removeActive(rf) end
-	end)
+    local c1 = parent.ChildAdded:Connect(function(child)
+        if child.Name == "Base" then addActive(rf) end
+    end)
+    local c2 = parent.ChildRemoved:Connect(function(child)
+        if child.Name == "Base" then removeActive(rf) end
+    end)
 
-	watchConnections[#watchConnections + 1] = c1
-	watchConnections[#watchConnections + 1] = c2
+    watchConnections[#watchConnections + 1] = c1
+    watchConnections[#watchConnections + 1] = c2
 end
 
 local function disconnectAll()
-	for _, c in ipairs(watchConnections) do c:Disconnect() end
-	watchConnections = {}
-	table.clear(activeRemotes)
-	table.clear(activeRemoteSet)
-	currentTycoon = nil
+    for _, c in ipairs(watchConnections) do c:Disconnect() end
+    watchConnections = {}
+    table.clear(activeRemotes)
+    table.clear(activeRemoteSet)
+    currentTycoon = nil
 end
 
 local function connectToTycoon(tycoon)
-	local purchases = tycoon:FindFirstChild("Purchases")
-	if not purchases then return end
+    local purchases = tycoon:FindFirstChild("Purchases")
+    if not purchases then return end
 
-	currentTycoon = tycoon
+    currentTycoon = tycoon
 
-	for _, obj in ipairs(purchases:GetDescendants()) do
-		if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
-			watchRemote(obj)
-		end
-	end
+    for _, obj in ipairs(purchases:GetDescendants()) do
+        if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
+            watchRemote(obj)
+        end
+    end
 
-	local c = purchases.DescendantAdded:Connect(function(obj)
-		if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
-			watchRemote(obj)
-		end
-	end)
-	watchConnections[#watchConnections + 1] = c
+    local c = purchases.DescendantAdded:Connect(function(obj)
+        if obj.Name == "Purchase" and obj:IsA("RemoteFunction") then
+            watchRemote(obj)
+        end
+    end)
+    watchConnections[#watchConnections + 1] = c
 end
 
--- Initial connect + runtime watch
 local function findAndConnect()
-	local t = getPlayerTycoon()
-	if t then connectToTycoon(t) end
+    local t = getPlayerTycoon()
+    if t then connectToTycoon(t) end
 end
 
 findAndConnect()
 
 workspace.ChildAdded:Connect(function(child)
-	if child.Name:sub(1, 6) == "Tycoon" and isOwnedByLocalPlayer(child) then
-		disconnectAll()
-		connectToTycoon(child)
-	end
+    if child.Name:match("^Tycoon") and isOwnedByLocalPlayer(child) then
+        disconnectAll()
+        connectToTycoon(child)
+    end
 end)
 
 workspace.ChildRemoved:Connect(function(child)
-	if child == currentTycoon then disconnectAll() end
+    if child == currentTycoon then disconnectAll() end
 end)
 
 -- =====================
--- Blaster Loop â€” fires ALL active remotes simultaneously each frame
+-- Blaster Loop
 -- =====================
 
 task.spawn(function()
-	while true do
-		pcall(function()
-			if not remoteModeActive then
-				task.wait(0.1)
-				return
-			end
+    while true do
+        pcall(function()
+            if not remoteModeActive then
+                task.wait(0.1)
+                return
+            end
 
-			local count = #activeRemotes
-			if count == 0 then
-				task.wait(0.1)
-				return
-			end
+            local count = #activeRemotes
+            if count == 0 then
+                task.wait(0.1)
+                return
+            end
 
-			-- Spawn every active remote concurrently â€” all hit server same frame
-			for i = 1, count do
-				local rf = activeRemotes[i]
-				if rf and rf.Parent then
-					task.spawn(pcall, rf.InvokeServer, rf)
-				end
-			end
+            for i = 1, count do
+                local rf = activeRemotes[i]
+                if rf and rf.Parent then
+                    task.spawn(pcall, rf.InvokeServer, rf)
+                end
+            end
 
-			task.wait(loopDelay)
-		end)
-	end
+            task.wait(loopDelay)
+        end)
+    end
 end)
 
 -- =====================
@@ -185,382 +189,283 @@ end)
 -- =====================
 
 local function cleanupTycoonAssets(purchasesFolder)
-	for _, category in ipairs(purchasesFolder:GetChildren()) do
-		if not IGNORED_FOLDERS[category.Name] then
-			for _, item in ipairs(category:GetChildren()) do
-				if item.Name ~= "Buttons" and item:IsA("Folder") then
-					item:Destroy()
-				end
-			end
-		end
-	end
+    for _, category in ipairs(purchasesFolder:GetChildren()) do
+        if not IGNORED_FOLDERS[category.Name] then
+            for _, item in ipairs(category:GetChildren()) do
+                if item.Name ~= "Buttons" and item:IsA("Folder") then
+                    item:Destroy()
+                end
+            end
+        end
+    end
+end
+
+local function runAntiLag()
+    local cleaned, failed = 0, 0
+    for _, tycoon in ipairs(getTycoons()) do
+        local purchases = tycoon:FindFirstChild("Purchases")
+        if purchases then
+            local ok, err = pcall(cleanupTycoonAssets, purchases)
+            if ok then
+                cleaned += 1
+            else
+                failed += 1
+                warn("[Automator] " .. tycoon.Name .. " failed: " .. tostring(err))
+            end
+        end
+    end
+    return cleaned, failed
 end
 
 -- =====================
 -- Purchase Sounds
 -- =====================
 
+local function getSound(path)
+    local current = RS
+    for _, name in ipairs(path) do
+        current = current:FindFirstChild(name)
+        if not current then return nil end
+    end
+    return current
+end
+
 local SOUND_PATHS = {
-	RS:WaitForChild("Modules"):WaitForChild("Tycoon"):WaitForChild("Entity")
-		:WaitForChild("Client"):WaitForChild("ClientTycoonPurchase"):WaitForChild("Purchase"),
-	RS:WaitForChild("Modules"):WaitForChild("Tycoon"):WaitForChild("Entity")
-		:WaitForChild("Client"):WaitForChild("ClientTycoonPurchasable"):WaitForChild("Wind"),
-	RS:WaitForChild("Modules"):WaitForChild("Tycoon"):WaitForChild("Entity")
-		:WaitForChild("Client"):WaitForChild("ClientTycoonPurchasable"):WaitForChild("Drop"),
+    getSound({"Modules", "Tycoon", "Entity", "Client", "ClientTycoonPurchase", "Purchase"}),
+    getSound({"Modules", "Tycoon", "Entity", "Client", "ClientTycoonPurchasable", "Wind"}),
+    getSound({"Modules", "Tycoon", "Entity", "Client", "ClientTycoonPurchasable", "Drop"}),
 }
+
+local validSounds = {}
+for _, sound in ipairs(SOUND_PATHS) do
+    if sound then
+        table.insert(validSounds, sound)
+    end
+end
+SOUND_PATHS = validSounds
 
 local originalVolumes = {}
 for _, sound in ipairs(SOUND_PATHS) do
-	originalVolumes[sound] = sound.Volume
+    originalVolumes[sound] = sound.Volume
 end
 
 local function setSoundsMuted(mute)
-	for _, sound in ipairs(SOUND_PATHS) do
-		sound.Volume = mute and 0 or originalVolumes[sound]
-	end
+    for _, sound in ipairs(SOUND_PATHS) do
+        sound.Volume = mute and 0 or originalVolumes[sound]
+    end
 end
 
 -- =====================
 -- Auto Ascend
 -- =====================
 
-local ascendThread = nil
-
 local function startAscend()
-	ascendThread = task.spawn(function()
-		while ascendActive do
-			for i = 1, 10 do
-				local tycoon = workspace:FindFirstChild("Tycoon" .. i)
-				if tycoon then
-					local remotes = tycoon:FindFirstChild("Remotes")
-					if remotes then
-						local ascend = remotes:FindFirstChild("Ascend")
-						if ascend then
-							task.spawn(pcall, ascend.InvokeServer, ascend)
-						end
-					end
-				end
-			end
-			task.wait(0.5)
-		end
-	end)
-end
-
-local function stopAscend()
-	ascendActive = false
-	if ascendThread then
-		task.cancel(ascendThread)
-		ascendThread = nil
-	end
+    task.spawn(function()
+        while ascendActive do
+            for _, tycoon in ipairs(getTycoons()) do
+                local remotes = tycoon:FindFirstChild("Remotes")
+                if remotes then
+                    local ascend = remotes:FindFirstChild("Ascend")
+                    if ascend then
+                        task.spawn(pcall, ascend.InvokeServer, ascend)
+                    end
+                end
+            end
+            task.wait(0.5)
+        end
+    end)
 end
 
 -- =====================
 -- Auto Fruit Value
 -- =====================
 
-local fruitValueThread = nil
-
 local function startFruitValue()
-	fruitValueThread = task.spawn(function()
-		while fruitValueActive do
-			for i = 1, 10 do
-				local tycoon = workspace:FindFirstChild("Tycoon" .. i)
-				if tycoon then
-					local remotes = tycoon:FindFirstChild("Remotes")
-					if remotes then
-						local upgradePower = remotes:FindFirstChild("UpgradePowerLevel")
-						if upgradePower then
-							task.spawn(pcall, upgradePower.InvokeServer, upgradePower, "ClickFruitValue")
-						end
-					end
-				end
-			end
-			task.wait(0.3)
-		end
-	end)
-end
-
-local function stopFruitValue()
-	fruitValueActive = false
-	if fruitValueThread then
-		task.cancel(fruitValueThread)
-		fruitValueThread = nil
-	end
+    task.spawn(function()
+        while fruitValueActive do
+            for _, tycoon in ipairs(getTycoons()) do
+                local remotes = tycoon:FindFirstChild("Remotes")
+                if remotes then
+                    local upgradePower = remotes:FindFirstChild("UpgradePowerLevel")
+                    if upgradePower then
+                        task.spawn(pcall, upgradePower.InvokeServer, upgradePower, "ClickFruitValue")
+                    end
+                end
+            end
+            task.wait(0.3)
+        end
+    end)
 end
 
 -- =====================
 -- Auto Collect Shiny Lemons
 -- =====================
 
-local shinyLemonThread = nil
-
 local function startShinyLemonCollector()
-	shinyLemonThread = task.spawn(function()
-		while shinyLemonActive do
-			pcall(function()
-				local character = LocalPlayer.Character
-				if not character or not character:FindFirstChild("HumanoidRootPart") then
-					task.wait(0.1)
-					return
-				end
+    task.spawn(function()
+        while shinyLemonActive do
+            pcall(function()
+                local character = LocalPlayer.Character
+                if not character or not character:FindFirstChild("HumanoidRootPart") then
+                    task.wait(0.1)
+                    return
+                end
 
-				local hrp = character.HumanoidRootPart
-				local oldPos = hrp.CFrame
+                local hrp = character.HumanoidRootPart
+                local oldPos = hrp.CFrame
 
-				-- Scan all tycoons for shiny fruits
-				for i = 1, 10 do
-					if not shinyLemonActive then break end
+                for _, tycoon in ipairs(getTycoons()) do
+                    if not shinyLemonActive then break end
 
-					local tycoon = workspace:FindFirstChild("Tycoon" .. i)
-					if tycoon then
-						local constant = tycoon:FindFirstChild("Constant")
-						if constant then
-							local trees = constant:FindFirstChild("Trees")
-							if trees then
-								local treeChildren = trees:GetChildren()
-								for _, tree in ipairs(treeChildren) do
-									if not shinyLemonActive then break end
+                    local constant = tycoon:FindFirstChild("Constant")
+                    if constant then
+                        local trees = constant:FindFirstChild("Trees")
+                        if trees then
+                            for _, tree in ipairs(trees:GetChildren()) do
+                                if not shinyLemonActive then break end
 
-									local treeContents = tree:GetChildren()
-									for _, item in ipairs(treeContents) do
-										if item.Name == "Fruit" then
-											-- Check if shiny (has SpecialAttachment and Neon material)
-											local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
-											local isNeon = item.Material == Enum.Material.Neon
+                                for _, item in ipairs(tree:GetChildren()) do
+                                    if not shinyLemonActive then break end
 
-											if hasSpecial and isNeon then
-												-- TP to fruit
-												hrp.CFrame = item.CFrame + item.CFrame.LookVector * 5
+                                    if item.Name == "Fruit" then
+                                        local hasSpecial = item:FindFirstChild("SpecialAttachment") ~= nil
+                                        local isNeon = item.Material == Enum.Material.Neon
 
-												-- Wait for TP to settle
-												task.wait(0.5)
+                                        if hasSpecial and isNeon then
+                                            hrp.CFrame = item.CFrame + item.CFrame.LookVector * 5
+                                            task.wait(0.1)
 
-												-- Find and fire ClickDetector
-												local clickPart = item:FindFirstChild("ClickPart")
-												if clickPart then
-													local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
-													if clickDetector then
-														task.spawn(function()
-															pcall(clickDetector.MouseClick)
-														end)
-													end
-												end
+                                            local clickPart = item:FindFirstChild("ClickPart")
+                                            if clickPart then
+                                                local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
+                                                if clickDetector then
+                                                    pcall(fireclickdetector, clickDetector)
+                                                end
+                                            end
 
-												-- Stay for 1 second total before moving to next lemon
-												task.wait(1)
-											end
-										end
-									end
-								end
-							end
-						end
-					end
-				end
+                                            task.wait(0.5)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
 
-				-- Return to original position
-				if shinyLemonActive then
-					hrp.CFrame = oldPos
-				end
-			end)
-			task.wait(1) -- Scan interval
-		end
-	end)
-end
-
-local function stopShinyLemonCollector()
-	shinyLemonActive = false
-	if shinyLemonThread then
-		task.cancel(shinyLemonThread)
-		shinyLemonThread = nil
-	end
+                if shinyLemonActive then
+                    hrp.CFrame = oldPos
+                end
+            end)
+            task.wait(1)
+        end
+    end)
 end
 
 -- =====================
--- Rayfield UI
+-- WindUI Setup
 -- =====================
 
-Tab:CreateSection("Remote Automation")
+local Config = Window.ConfigManager:Config("TycoonAutomator")
 
-Tab:CreateToggle({
-	Name = "Auto Buy",
-	CurrentValue = false,
-	Flag = "RemoteMode",
-	Callback = function(Value)
-		remoteModeActive = Value
-		Rayfield:Notify({
-			Title = "Auto Buy",
-			Content = "Auto Buy is now " .. (Value and "ON" or "OFF"),
-			Duration = 3,
-			Image = Value and "zap" or "zap-off",
-		})
-	end,
+local Sec1 = Tab:Section({ Title = "Remote Automation" })
+
+Sec1:Toggle({
+    Title = "Auto Buy",
+    Desc = "Automatically purchases available items",
+    Icon = "zap",
+    Value = false,
+    Flag = "RemoteMode",
+    Callback = function(state)
+        remoteModeActive = state
+    end,
 })
 
-Tab:CreateToggle({
-	Name = "Fast Auto Ascend",
-	CurrentValue = false,
-	Flag = "AscendMode",
-	Callback = function(Value)
-		ascendActive = Value
-		if Value then
-			startAscend()
-		else
-			stopAscend()
-		end
-		Rayfield:Notify({
-			Title = "Auto Ascend",
-			Content = "Auto Ascend is now " .. (Value and "ON" or "OFF"),
-			Duration = 3,
-			Image = Value and "arrow-up" or "arrow-down",
-		})
-	end,
+Sec1:Toggle({
+    Title = "Fast Auto Ascend",
+    Icon = "arrow-up",
+    Value = false,
+    Flag = "AscendMode",
+    Callback = function(state)
+        ascendActive = state
+        if state then startAscend() end
+    end,
 })
 
-Tab:CreateToggle({
-	Name = "Auto Buy Fruit Value",
-	CurrentValue = false,
-	Flag = "FruitValue",
-	Callback = function(Value)
-		fruitValueActive = Value
-		if Value then
-			startFruitValue()
-		else
-			stopFruitValue()
-		end
-		Rayfield:Notify({
-			Title = "Auto Fruit Value",
-			Content = "Auto Fruit Value is now " .. (Value and "ON" or "OFF"),
-			Duration = 3,
-			Image = Value and "apple" or "apple",
-		})
-	end,
+Sec1:Toggle({
+    Title = "Auto Buy Fruit Value",
+    Icon = "apple",
+    Value = false,
+    Flag = "FruitValue",
+    Callback = function(state)
+        fruitValueActive = state
+        if state then startFruitValue() end
+    end,
 })
 
-Tab:CreateToggle({
-	Name = "Auto Collect Shiny Lemons",
-	CurrentValue = false,
-	Flag = "ShinyLemons",
-	Callback = function(Value)
-		shinyLemonActive = Value
-		if Value then
-			startShinyLemonCollector()
-		else
-			stopShinyLemonCollector()
-		end
-		Rayfield:Notify({
-			Title = "Shiny Lemon Collector",
-			Content = "Shiny Lemon Collector is now " .. (Value and "ON" or "OFF"),
-			Duration = 3,
-			Image = "sparkles",
-		})
-	end,
+Sec1:Toggle({
+    Title = "Auto Collect Shiny Lemons",
+    Icon = "sparkles",
+    Value = false,
+    Flag = "ShinyLemons",
+    Callback = function(state)
+        shinyLemonActive = state
+        if state then startShinyLemonCollector() end
+    end,
 })
 
-Tab:CreateToggle({
-	Name = "Mute Purchase Sounds",
-	CurrentValue = false,
-	Flag = "MuteSounds",
-	Callback = function(Value)
-		setSoundsMuted(Value)
-		Rayfield:Notify({
-			Title = "Purchase Sounds",
-			Content = Value and "Sounds muted." or "Sounds restored.",
-			Duration = 3,
-			Image = Value and "volume-x" or "volume-2",
-		})
-	end,
+Sec1:Toggle({
+    Title = "Mute Purchase Sounds",
+    Icon = "volume-x",
+    Value = false,
+    Flag = "MuteSounds",
+    Callback = function(state)
+        setSoundsMuted(state)
+    end,
 })
 
-Tab:CreateSection("Performance")
+local Sec2 = Tab:Section({ Title = "Performance" })
 
-local autoLagCleanup = false
-
-Tab:CreateToggle({
-	Name = "Auto-Run Anti-Lag on Startup",
-	CurrentValue = false,
-	Flag = "AutoLag",
-	Callback = function(Value)
-		autoLagCleanup = Value
-		if Value then
-			-- Run anti-lag immediately
-			local cleaned, failed = 0, 0
-			for i = 1, 10 do
-				local tycoon = workspace:FindFirstChild("Tycoon" .. i)
-				if tycoon then
-					local purchases = tycoon:FindFirstChild("Purchases")
-					if purchases then
-						local ok, err = pcall(cleanupTycoonAssets, purchases)
-						if ok then cleaned += 1
-						else
-							failed += 1
-							warn("[Automator] Tycoon" .. i .. " failed: " .. tostring(err))
-						end
-					end
-				end
-			end
-			Rayfield:Notify({ Title = "Anti-Lag", Content = "Cleaned " .. cleaned .. " tycoon(s)!", Duration = 4, Image = "trash-2" })
-		end
-	end,
+Sec2:Toggle({
+    Title = "Auto-Run Anti-Lag on Startup",
+    Icon = "trash-2",
+    Value = false,
+    Flag = "AutoLag",
+    Callback = function(state)
+        if state then
+            runAntiLag()
+        end
+    end,
 })
 
-Tab:CreateButton({
-	Name = "Run Anti-Lag Now (All Tycoons)",
-	Callback = function()
-		local cleaned, failed = 0, 0
-		for i = 1, 10 do
-			local tycoon = workspace:FindFirstChild("Tycoon" .. i)
-			if tycoon then
-				local purchases = tycoon:FindFirstChild("Purchases")
-				if purchases then
-					local ok, err = pcall(cleanupTycoonAssets, purchases)
-					if ok then cleaned += 1
-					else
-						failed += 1
-						warn("[Automator] Tycoon" .. i .. " failed: " .. tostring(err))
-					end
-				end
-			end
-		end
-
-		if cleaned == 0 and failed == 0 then
-			Rayfield:Notify({ Title = "Anti-Lag", Content = "No tycoons found.", Duration = 4, Image = "search-x" })
-		elseif failed > 0 then
-			Rayfield:Notify({ Title = "Anti-Lag", Content = "Cleaned " .. cleaned .. ", failed " .. failed .. ".", Duration = 5, Image = "alert-triangle" })
-		else
-			Rayfield:Notify({ Title = "Anti-Lag", Content = "Cleaned " .. cleaned .. " tycoon(s)!", Duration = 4, Image = "trash-2" })
-		end
-	end,
+Sec2:Button({
+    Title = "Run Anti-Lag Now (All Tycoons)",
+    Icon = "trash-2",
+    Callback = function()
+        local cleaned, failed = runAntiLag()
+        if cleaned == 0 and failed == 0 then
+            WindUI:Notify({ Title = "Anti-Lag", Content = "No tycoons found.", Duration = 4, Icon = "search-x" })
+        elseif failed > 0 then
+            WindUI:Notify({ Title = "Anti-Lag", Content = "Cleaned " .. cleaned .. ", failed " .. failed .. ".", Duration = 5, Icon = "alert-triangle" })
+        else
+            WindUI:Notify({ Title = "Anti-Lag", Content = "Cleaned " .. cleaned .. " tycoon(s)!", Duration = 4, Icon = "trash-2" })
+        end
+    end,
 })
 
-Tab:CreateSection("Settings")
+local Sec3 = Tab:Section({ Title = "Settings" })
 
-Tab:CreateSlider({
-	Name = "Loop Delay",
-	Range = {0.05, 2},
-	Increment = 0.05,
-	Suffix = "s",
-	CurrentValue = 0.1,
-	Flag = "LoopDelay",
-	Callback = function(Value)
-		loopDelay = Value
-	end,
+Sec3:Slider({
+    Title = "Loop Delay",
+    Desc = "Delay between remote fires",
+    Icon = "clock",
+    Value = {
+        Min = 0.05,
+        Max = 2,
+        Default = 0.1,
+    },
+    Step = 0.05,
+    Flag = "LoopDelay",
+    Callback = function(value)
+        loopDelay = value
+    end,
 })
-
-Rayfield:LoadConfiguration()
-
--- Run anti-lag on startup if toggle is enabled
-if autoLagCleanup then
-	task.wait(0.5) -- Give things time to load
-	local cleaned, failed = 0, 0
-	for i = 1, 10 do
-		local tycoon = workspace:FindFirstChild("Tycoon" .. i)
-		if tycoon then
-			local purchases = tycoon:FindFirstChild("Purchases")
-			if purchases then
-				local ok, err = pcall(cleanupTycoonAssets, purchases)
-				if ok then cleaned += 1
-				else failed += 1 end
-			end
-		end
-	end
-end
