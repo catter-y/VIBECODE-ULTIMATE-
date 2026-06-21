@@ -317,7 +317,9 @@ local function startShinyLemonCollector()
 						if constant then
 							local trees = constant:FindFirstChild("Trees")
 							if trees then
+								print("[Lemon Collector] Found Trees folder in Tycoon" .. i)
 								local treeChildren = trees:GetChildren()
+								print("[Lemon Collector] Found " .. #treeChildren .. " trees")
 								
 								-- Separate trees by whether they have shiny lemons
 								local shinyTrees = {}
@@ -331,6 +333,7 @@ local function startShinyLemonCollector()
 										if item.Name == "Fruit" and item.Transparency ~= 1 then
 											if item:FindFirstChild("SpecialAttachment") and item.Material == Enum.Material.Neon then
 												hasShiny = true
+												print("[Lemon Collector] Found shiny fruit in " .. tree.Name)
 												break
 											end
 										end
@@ -343,6 +346,8 @@ local function startShinyLemonCollector()
 									end
 								end
 								
+								print("[Lemon Collector] Shiny trees: " .. #shinyTrees .. " | Normal trees: " .. #normalTrees)
+								
 								-- Process shiny trees first
 								local allTrees = {}
 								for _, tree in ipairs(shinyTrees) do allTrees[#allTrees + 1] = tree end
@@ -351,8 +356,11 @@ local function startShinyLemonCollector()
 								for _, tree in ipairs(allTrees) do
 									if not shinyLemonActive then break end
 									
+									print("[Lemon Collector] Processing tree: " .. tree.Name)
+									
 									-- TP to tree once
 									hrp.CFrame = tree.CFrame
+									task.wait(0.1)
 									
 									local shinyFruits = {}
 									local normalFruits = {}
@@ -366,40 +374,58 @@ local function startShinyLemonCollector()
 											
 											if hasSpecial and isNeon then
 												shinyFruits[#shinyFruits + 1] = item
+												print("[Lemon Collector] Added shiny fruit: " .. item.Name)
 											else
 												normalFruits[#normalFruits + 1] = item
+												print("[Lemon Collector] Added normal fruit: " .. item.Name)
 											end
 										end
 									end
+									
+									print("[Lemon Collector] Tree has " .. #shinyFruits .. " shiny and " .. #normalFruits .. " normal fruits")
 									
 									-- Click shiny lemons first
 									for _, fruit in ipairs(shinyFruits) do
 										if not shinyLemonActive then break end
 										
+										print("[Lemon Collector] Clicking shiny fruit: " .. fruit.Name)
 										local clickPart = fruit:FindFirstChild("ClickPart")
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
 											if clickDetector then
+												print("[Lemon Collector] Found ClickDetector, firing...")
 												pcall(fireclickdetector, clickDetector, 0)
+												print("[Lemon Collector] Fired!")
+											else
+												print("[Lemon Collector] No ClickDetector found in ClickPart")
 											end
+										else
+											print("[Lemon Collector] No ClickPart found in fruit")
 										end
 										
-										task.wait(0.35)
+										task.wait(0.30)
 									end
 									
 									-- Then click normal lemons
 									for _, fruit in ipairs(normalFruits) do
 										if not shinyLemonActive then break end
 										
+										print("[Lemon Collector] Clicking normal fruit: " .. fruit.Name)
 										local clickPart = fruit:FindFirstChild("ClickPart")
 										if clickPart then
 											local clickDetector = clickPart:FindFirstChildOfClass("ClickDetector")
 											if clickDetector then
+												print("[Lemon Collector] Found ClickDetector, firing...")
 												pcall(fireclickdetector, clickDetector, 0)
+												print("[Lemon Collector] Fired!")
+											else
+												print("[Lemon Collector] No ClickDetector found in ClickPart")
 											end
+										else
+											print("[Lemon Collector] No ClickPart found in fruit")
 										end
 										
-										task.wait(0.35)
+										task.wait(0.30)
 									end
 								end
 							end
@@ -410,9 +436,10 @@ local function startShinyLemonCollector()
 				-- Return to original position
 				if shinyLemonActive then
 					hrp.CFrame = oldPos
+					print("[Lemon Collector] Returned to start position")
 				end
 			end)
-			task.wait(1)
+			task.wait(2)
 		end
 	end)
 end
